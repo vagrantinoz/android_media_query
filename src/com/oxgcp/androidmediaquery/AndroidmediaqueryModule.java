@@ -135,12 +135,17 @@ public class AndroidmediaqueryModule extends KrollModule
 				);
 				cursor.moveToFirst();
 				
-				obj.put("thumbnail", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)));
-				obj.put("thumbnail_width", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.WIDTH)));
-				obj.put("thumbnail_height", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.HEIGHT)));
+				if (cursor.getCount() > 0) {
+					obj.put("thumbnail", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)));
+					obj.put("thumbnail_width", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.WIDTH)));
+					obj.put("thumbnail_height", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.HEIGHT)));
+				}
+				else {
+					Log.d(TAG, "get Thumbnail - ERROR");
+					Log.d(TAG, "(" + _id + ") thumbnail not exist");
+				}
 				
 				cursor.close();
-				
 				
 				// exif
 				try {
