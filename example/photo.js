@@ -1,21 +1,19 @@
 
 
-function getPhotos(e) {
+function getPhotos(page, perPage) {
 	
 	var AndroidMediaQuery = require('com.oxgcp.androidmediaquery');
-	var win = e.source;
-
-	var table = Ti.UI.createTableView();
-	win.add(table);
 	
-	
-	console.log("mode :: " + win.mode)
-	var photos = AndroidMediaQuery.queryPhotos(0, 100); // offset, limit
+	var photos = AndroidMediaQuery.queryPhotos((page * perPage), perPage); // offset, limit
 	var rows = [];
-
+	var count = 0;
+	
 	for (var i in photos) {
-
+		
+		count += 1;
+		
 		var photo = photos[i];
+		console.log( "(" + i + ") " + (new Date(parseInt(photo.dateTaken))).toString());
 
 		var row = Ti.UI.createTableViewRow({
 			width: Ti.UI.FILL,
@@ -63,13 +61,61 @@ function getPhotos(e) {
 
 		rows.push(row);
 	}
+	
+	console.log("");
+	console.log("page :: " + (page+1) + " / count :: " + count);
+	console.log("");
+	
+	return {
+		rows: rows,
+		end: (count < perPage),
+	};
+}
 
-	table.setData(rows);
+function pagination(e) {
+	if (e.source._pageEnd) return;
+	
+	if (e.firstVisibleItem + e.visibleItemCount >= e.totalItemCount) {
+		var data = getPhotos(e.source.page, e.source.perPage);
+		e.source.appendRow(data["rows"]);
+		e.source.page += 1;
+		e.source._pageEnd = data["end"];
+	}
+}
+
+function createTableView(e) {
+	var win = e.source;
+
+	var table = Ti.UI.createTableView({
+		page: 0,
+		perPage: 10,
+		_pageEnd: false,
+	});
+	win.add(table);
+	
+	table.addEventListener("scroll", pagination);
+	table._release = function() {
+		table.removeEventListener("scroll", pagination);
+		table = undefined;
+	}
+	
+	var data = getPhotos(table.page, table.perPage);
+	table.appendRow(data["rows"]);
+	table.page += 1;
+	table._pageEnd = data["end"];
 }
 
 function onCloseWindow(e) {
-	e.source.addEventListener("open", getPhotos);
-	e.source.addEventListener("close", onCloseWindow);
+	for(var child in e.source.getChildren()) {
+		if (child._release) {
+			e.source.remove(child);
+			child._release();
+			child = undefined;
+		}
+	}
+	
+	e.source.removeEventListener("open", createTableView);
+	e.source.removeEventListener("close", onCloseWindow);
 }
 
 exports.createWindow = function(options) {
@@ -81,7 +127,7 @@ exports.createWindow = function(options) {
 		backgroundColor: "#fff",
 	})
 	
-	win.addEventListener("open", getPhotos);
+	win.addEventListener("open", createTableView);
 	win.addEventListener("close", onCloseWindow);
 	
 	return win;

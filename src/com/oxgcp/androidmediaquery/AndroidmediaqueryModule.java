@@ -187,9 +187,9 @@ public class AndroidmediaqueryModule extends KrollModule
 		String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC LIMIT " + String.valueOf(limit) + " OFFSET " + String.valueOf(offset);
 		
 		String[] projection = new String[] {
+			MediaStore.Images.Media.DATE_TAKEN,
 			MediaStore.Images.Media._ID,
 			MediaStore.Images.Media.DATA,
-			MediaStore.Images.Media.DATE_TAKEN,
 			MediaStore.Images.Media.LATITUDE,
 			MediaStore.Images.Media.LONGITUDE,
 			MediaStore.Images.Media.SIZE,
@@ -228,12 +228,13 @@ public class AndroidmediaqueryModule extends KrollModule
 				
 				String _id = c.getString(c.getColumnIndex(MediaStore.Images.Media._ID));
 				String path = c.getString(c.getColumnIndex(MediaStore.Images.Media.DATA));
+				String dateTaken = c.getString(c.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN));
 				
 				// id, path, date_taken
 				obj.put("id", _id);
 				obj.put("path", path);
 				obj.put("size", c.getString(c.getColumnIndex(MediaStore.Images.Media.SIZE)));
-				obj.put("dateTaken", c.getString(c.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN)));
+				obj.put("dateTaken", dateTaken);
 				// gps info
 				obj.put("lat", Float.toString(c.getFloat(c.getColumnIndex(MediaStore.Images.Media.LATITUDE))));
 				obj.put("lon", Float.toString(c.getFloat(c.getColumnIndex(MediaStore.Images.Media.LONGITUDE))));
@@ -264,6 +265,10 @@ public class AndroidmediaqueryModule extends KrollModule
 						obj.put("thumbnail_width", thumbnailInfo[1]);
 						obj.put("thumbnail_height", thumbnailInfo[2]);
 					}
+					else {
+						Log.d(TAG, "get Thumbnail - ERROR");
+						Log.d(TAG, "(" + _id + ") thumbnail cannot create");
+					}
 				}
 				cursor.close();
 				
@@ -293,7 +298,7 @@ public class AndroidmediaqueryModule extends KrollModule
 					Log.d(TAG, e.getMessage());
 				}
                 
-				result.put(_id, new KrollDict(obj)); //add the item
+				result.put(i.toString(), new KrollDict(obj)); //add the item
 
 				c.moveToNext();
 			}
