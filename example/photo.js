@@ -73,7 +73,13 @@ function getPhotos(page, perPage) {
 }
 
 function pagination(e) {
+	if (e.source._delay) return;
 	if (e.source._pageEnd) return;
+	
+	e.source._delay = true;
+	setTimeout(function() {
+		e.source._delay = false;
+	}, 500);
 	
 	if (e.firstVisibleItem + e.visibleItemCount >= e.totalItemCount) {
 		var data = getPhotos(e.source.page, e.source.perPage);
@@ -90,6 +96,7 @@ function createTableView(e) {
 		page: 0,
 		perPage: 10,
 		_pageEnd: false,
+		_delay: false,
 	});
 	win.add(table);
 	
