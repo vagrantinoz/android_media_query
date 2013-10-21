@@ -23,22 +23,27 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.IOException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileNotFoundException;
 import java.io.ObjectOutputStream;
+import java.util.Date;
+import java.lang.Math;
 
 import android.app.Activity;
 import android.net.Uri;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Bitmap.CompressFormat;
 import android.graphics.Rect;
 import android.provider.MediaStore;
 import android.media.ExifInterface;
 import android.graphics.Matrix;
+import android.os.Environment;
 
 
 
@@ -75,7 +80,7 @@ public class AndroidmediaqueryModule extends KrollModule
 		if (limit == null) limit = 100;
 		
 		String where = MediaStore.Images.Media.SIZE + " > 0"; //  The size of the file in bytes가 0 이상인 경우만 query
-		String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC LIMIT " + limit + " OFFSET " + offset;
+		String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC LIMIT " + String.valueOf(limit) + " OFFSET " + String.valueOf(offset);
 		
 		String[] projection = new String[] {
 			MediaStore.Images.Media._ID,
@@ -85,16 +90,7 @@ public class AndroidmediaqueryModule extends KrollModule
 			MediaStore.Images.Media.LONGITUDE,
 			MediaStore.Images.Media.SIZE,
 			MediaStore.Images.Media.DATE_ADDED,
-		};
-		
-		String[] projection2 = {
-			MediaStore.Images.Thumbnails.DATA,
-			MediaStore.Images.Thumbnails.IMAGE_ID,
-			MediaStore.Images.Thumbnails.HEIGHT,
-			MediaStore.Images.Thumbnails.WIDTH,
-			MediaStore.Images.Thumbnails.KIND,
-		};
-        
+		};  
 		
 		Log.d(TAG, orderBy);
 		
@@ -104,6 +100,18 @@ public class AndroidmediaqueryModule extends KrollModule
 		
 		Log.d(TAG, "Media.images query result count = " + c.getCount());
         
+		return getPhotos(activity, c);
+	}
+	
+	public KrollDict getPhotos(Activity activity, Cursor c) {
+		
+		String[] projection2 = {
+			MediaStore.Images.Thumbnails.DATA,
+			MediaStore.Images.Thumbnails.IMAGE_ID,
+			MediaStore.Images.Thumbnails.HEIGHT,
+			MediaStore.Images.Thumbnails.WIDTH,
+			MediaStore.Images.Thumbnails.KIND,
+		};
 		
 		// formatting result
 		KrollDict result = new KrollDict(c.getCount());
@@ -127,25 +135,53 @@ public class AndroidmediaqueryModule extends KrollModule
 				obj.put("lon", Float.toString(c.getFloat(c.getColumnIndex(MediaStore.Images.Media.LONGITUDE))));
 				
 				// query thumbnail
-				Cursor cursor = activity.getContentResolver().query(MediaStore.Images.Thumbnails.EXTERNAL_CONTENT_URI,
-					projection2,
-					MediaStore.Images.Thumbnails.IMAGE_ID + " = " + _id,
-					null,
-					null
-				);
-				cursor.moveToFirst();
+				Bitmap thumbnail = MediaStore.Images.Thumbnails.getThumbnail(activity.getContentResolver(), Long.parseLong(_id), 1, null);
 				
-				if (cursor.getCount() > 0) {
-					obj.put("thumbnail", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)));
-					obj.put("thumbnail_width", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.WIDTH)));
-					obj.put("thumbnail_height", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.HEIGHT)));
+				if (thumbnail.getWidth() != 0 && thumbnail.getHeight() != 0) {//(cursor.getCount() > 0) {
+					Log.d(TAG, "get Thumbnail - SUCCESS");
+					Log.d(TAG, "(" + _id + ") thumbnail exist " + String.valueOf(thumbnail.getWidth()) + " x " + String.valueOf(thumbnail.getHeight()));
+					
+					String filename = "thumb" + String.valueOf(new Date().getTime()) + "_" + String.valueOf((int)(Math.random() * 1000)) + ".jpeg";
+					
+					File directory = createDirIfNotExists("thumbnail");
+					File fileCacheItem = new File(directory, filename);
+					OutputStream out = null;
+
+					try
+					{
+						fileCacheItem.createNewFile();
+						out = new FileOutputStream(fileCacheItem);
+
+						thumbnail.compress(CompressFormat.JPEG, 100, out);
+					}
+					catch (Exception e)
+					{
+						Log.d(TAG, "File create Error ::: ");
+						Log.d(TAG, e.getMessage());
+					}
+					finally
+					{
+						try{
+							Log.d(TAG, " >> file path ::: ");
+							Log.d(TAG, directory.getPath() + "/" + filename);
+							
+							obj.put("thumbnail", directory.getPath() + "/" + filename);
+							obj.put("thumbnail_width", String.valueOf(thumbnail.getWidth()));
+							obj.put("thumbnail_height", String.valueOf(thumbnail.getHeight()));
+							
+							thumbnail.recycle();
+							out.close();
+						}
+						catch (Exception e) {
+							Log.d(TAG, "OutputStream close Error ::: ");
+							Log.d(TAG, e.getMessage());
+						}
+					}
 				}
 				else {
 					Log.d(TAG, "get Thumbnail - ERROR");
 					Log.d(TAG, "(" + _id + ") thumbnail not exist");
 				}
-				
-				cursor.close();
 				
 				// exif
 				try {
@@ -184,6 +220,22 @@ public class AndroidmediaqueryModule extends KrollModule
 		
 		return result;
 	}
+	
+	public static File createDirIfNotExists(String path) {
+	    boolean ret = true;
+
+	    File file = new File(Environment.getExternalStorageDirectory(), path);
+	    if (!file.exists()) {
+	        if (!file.mkdirs()) {
+	            Log.e("TravellerLog :: ", "Problem creating Image folder");
+	            ret = false;
+	        }
+	    }
+	
+			return ret ? file : null;
+	}
+	
+	
 	
 	
 	// @Kroll.method
