@@ -68,11 +68,115 @@ public class AndroidmediaqueryModule extends KrollModule
 		Log.d(TAG, "inside onAppCreate");
 		// put module init code that needs to run when the application is created
 	}
+	
+	// Methods
+	@Kroll.method
+	public KrollDict queryAlbumList()
+	{
+		Log.d(TAG, "");
+		Log.d(TAG, "queryAlbums called: ");
+		
+		// which image properties are we querying
+		String[] projection = new String[]{
+			"DISTINCT " + MediaStore.Images.Media.BUCKET_ID,
+			MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+			MediaStore.Images.Media._ID,
+			MediaStore.Images.Media.DATE_TAKEN,
+		};
+		
+		String[] projection2 = {
+			MediaStore.Images.Thumbnails.DATA,
+			MediaStore.Images.Thumbnails.IMAGE_ID,
+			MediaStore.Images.Thumbnails.HEIGHT,
+			MediaStore.Images.Thumbnails.WIDTH,
+			MediaStore.Images.Thumbnails.KIND,
+		};
+		
+		// String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC LIMIT " + String.valueOf(limit) + " OFFSET " + String.valueOf(offset);
 
+		// Make the query.
+		Activity activity = this.getActivity();
+		Cursor cur = activity.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 
+			projection, 
+			MediaStore.Images.Media.BUCKET_ID + " IS NOT NULL) GROUP BY (" + MediaStore.Images.Media.BUCKET_ID, 
+			null, 
+			"");
+
+		Log.d(TAG," query count="+cur.getCount());
+		
+		// formatting result
+		KrollDict result = new KrollDict(cur.getCount());
+		HashMap<String, String> obj = new HashMap<String, String>();
+
+		if (cur.moveToFirst()) {
+			String id;
+			String image_id;
+			String bucket_id;
+			String bucket;
+			String date;
+			
+			int idColumn = cur.getColumnIndex(MediaStore.Images.Media._ID);
+			int bucketIdColumn = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_ID);
+			int bucketColumn = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
+			int dateColumn = cur.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+			int thumbMagicColumn = cur.getColumnIndex(MediaStore.Images.Media.MINI_THUMB_MAGIC);
+
+			do {
+				// Get the field values
+				id = cur.getString(idColumn);
+				bucket_id = cur.getString(bucketIdColumn);
+				bucket = cur.getString(bucketColumn);
+				date = cur.getString(dateColumn);
+				
+				// Do something with the values.
+				Log.d(TAG, id + " bucket_id=" + bucket_id + " bucket=" + bucket + "  date_taken=" + date);				
+				// id, path, date_taken
+				obj.put("id", bucket_id);
+				obj.put("name", bucket);
+				obj.put("dateTaken", date);
+				
+				// query thumbnail
+				Cursor cursor = MediaStore.Images.Thumbnails.queryMiniThumbnail(
+					activity.getContentResolver(),
+					Long.parseLong(id),
+					1,
+					projection2
+				);
+				cursor.moveToFirst();
+
+				if (cursor.getCount() > 0) {
+					obj.put("thumbnail", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)));
+					obj.put("thumbnail_width", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.WIDTH)));
+					obj.put("thumbnail_height", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.HEIGHT)));
+				}
+				else {
+					Log.d(TAG, "query Thumbnail - ERROR");
+					Log.d(TAG, "(" + id + ") thumbnail not exist");
+					Log.d(TAG, "(" + id + ") craete thumbnail");
+					
+					// thumbnail이 없을 경우 생성
+					String[] thumbnailInfo = getThumbnail(activity, id);
+					if (thumbnailInfo != null){
+						obj.put("thumbnail", thumbnailInfo[0]);
+						obj.put("thumbnail_width", thumbnailInfo[1]);
+						obj.put("thumbnail_height", thumbnailInfo[2]);
+					}
+				}
+				cursor.close();
+				
+				result.put(id, new KrollDict(obj)); //add the item
+				
+			} while (cur.moveToNext());
+		}
+		
+		return result;
+	}
+	
 	// Methods
 	@Kroll.method
 	public KrollDict queryPhotos(Integer offset, Integer limit)
 	{
+		Log.d(TAG, "");
 		Log.d(TAG, "queryPhotos called: ");
 
 		//
@@ -135,53 +239,33 @@ public class AndroidmediaqueryModule extends KrollModule
 				obj.put("lon", Float.toString(c.getFloat(c.getColumnIndex(MediaStore.Images.Media.LONGITUDE))));
 				
 				// query thumbnail
-				Bitmap thumbnail = MediaStore.Images.Thumbnails.getThumbnail(activity.getContentResolver(), Long.parseLong(_id), 1, null);
-				
-				if (thumbnail.getWidth() != 0 && thumbnail.getHeight() != 0) {//(cursor.getCount() > 0) {
-					Log.d(TAG, "get Thumbnail - SUCCESS");
-					Log.d(TAG, "(" + _id + ") thumbnail exist " + String.valueOf(thumbnail.getWidth()) + " x " + String.valueOf(thumbnail.getHeight()));
-					
-					String filename = "thumb" + String.valueOf(new Date().getTime()) + "_" + String.valueOf((int)(Math.random() * 1000)) + ".jpeg";
-					
-					File directory = createDirIfNotExists("thumbnail");
-					File fileCacheItem = new File(directory, filename);
-					OutputStream out = null;
+				Cursor cursor = MediaStore.Images.Thumbnails.queryMiniThumbnail(
+					activity.getContentResolver(),
+					Long.parseLong(_id),
+					1,
+					projection2
+				);
+				cursor.moveToFirst();
 
-					try
-					{
-						fileCacheItem.createNewFile();
-						out = new FileOutputStream(fileCacheItem);
-
-						thumbnail.compress(CompressFormat.JPEG, 100, out);
-					}
-					catch (Exception e)
-					{
-						Log.d(TAG, "File create Error ::: ");
-						Log.d(TAG, e.getMessage());
-					}
-					finally
-					{
-						try{
-							Log.d(TAG, " >> file path ::: ");
-							Log.d(TAG, directory.getPath() + "/" + filename);
-							
-							obj.put("thumbnail", directory.getPath() + "/" + filename);
-							obj.put("thumbnail_width", String.valueOf(thumbnail.getWidth()));
-							obj.put("thumbnail_height", String.valueOf(thumbnail.getHeight()));
-							
-							thumbnail.recycle();
-							out.close();
-						}
-						catch (Exception e) {
-							Log.d(TAG, "OutputStream close Error ::: ");
-							Log.d(TAG, e.getMessage());
-						}
-					}
+				if (cursor.getCount() > 0) {
+					obj.put("thumbnail", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)));
+					obj.put("thumbnail_width", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.WIDTH)));
+					obj.put("thumbnail_height", cursor.getString(cursor.getColumnIndex(MediaStore.Images.Thumbnails.HEIGHT)));
 				}
 				else {
-					Log.d(TAG, "get Thumbnail - ERROR");
+					Log.d(TAG, "query Thumbnail - ERROR");
 					Log.d(TAG, "(" + _id + ") thumbnail not exist");
+					Log.d(TAG, "(" + _id + ") craete thumbnail");
+					
+					// thumbnail이 없을 경우 생성
+					String[] thumbnailInfo = getThumbnail(activity, _id);
+					if (thumbnailInfo != null){
+						obj.put("thumbnail", thumbnailInfo[0]);
+						obj.put("thumbnail_width", thumbnailInfo[1]);
+						obj.put("thumbnail_height", thumbnailInfo[2]);
+					}
 				}
+				cursor.close();
 				
 				// exif
 				try {
@@ -219,6 +303,63 @@ public class AndroidmediaqueryModule extends KrollModule
 		
 		
 		return result;
+	}
+	
+	public String[] getThumbnail(Activity activity, String id) {
+		
+		Bitmap thumbnail = MediaStore.Images.Thumbnails.getThumbnail(activity.getContentResolver(), Long.parseLong(id), 1, null);
+		
+		if (thumbnail.getWidth() != 0 && thumbnail.getHeight() != 0) {//(cursor.getCount() > 0) {
+			Log.d(TAG, "get Thumbnail - SUCCESS");
+			Log.d(TAG, "(" + id + ") thumbnail exist " + String.valueOf(thumbnail.getWidth()) + " x " + String.valueOf(thumbnail.getHeight()));
+			
+			String filename = "thumb" + String.valueOf(new Date().getTime()) + "_" + String.valueOf((int)(Math.random() * 1000)) + ".jpeg";
+			
+			File directory = createDirIfNotExists("thumbnail");
+			File fileCacheItem = new File(directory, filename);
+			OutputStream out = null;
+
+			try
+			{
+				fileCacheItem.createNewFile();
+				out = new FileOutputStream(fileCacheItem);
+
+				thumbnail.compress(CompressFormat.JPEG, 100, out);
+			}
+			catch (Exception e)
+			{
+				Log.d(TAG, "File create Error ::: ");
+				Log.d(TAG, e.getMessage());
+			}
+			finally
+			{
+				try{
+					String[] thumbnailDesc = {
+						directory.getPath() + "/" + filename,
+						String.valueOf(thumbnail.getWidth()),
+						String.valueOf(thumbnail.getHeight())
+					};
+					// obj.put("thumbnail", directory.getPath() + "/" + filename);
+					// obj.put("thumbnail_width", String.valueOf(thumbnail.getWidth()));
+					// obj.put("thumbnail_height", String.valueOf(thumbnail.getHeight()));
+					
+					thumbnail.recycle();
+					out.close();
+					
+					return thumbnailDesc;
+				}
+				catch (Exception e) {
+					Log.d(TAG, "OutputStream close Error ::: ");
+					Log.d(TAG, e.getMessage());
+				}
+			}
+		}
+		else {
+			Log.d(TAG, "get Thumbnail - ERROR");
+			Log.d(TAG, "(" + id + ") thumbnail not exist");
+		}
+		
+		return null;
 	}
 	
 	public static File createDirIfNotExists(String path) {
